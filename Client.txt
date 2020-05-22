@@ -167,7 +167,7 @@ local function initializeGame()
 		
 		transition:WaitForChild("Waiting").Text = "Loading Match... (2/2)";
 		
-		repCharactersRemote:FireServer(repStorage:WaitForChild(player.Team.Name.."1"), "Glock17") -- instantiate character based on team
+		repCharactersRemote:FireServer(repStorage:WaitForChild(player.Team.Name.."1"))
 		
 		player.CharacterAdded:Wait();
 		
