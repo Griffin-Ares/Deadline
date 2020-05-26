@@ -42,6 +42,7 @@ local function initializeGUI()
 	transition = mainGUIClone:WaitForChild("Transition");
 	
 	equipment = mainGUIClone:WaitForChild("Equipment");
+	weapons = equipment:WaitForChild("Weapons")
 	skillTreeButton = equipment:WaitForChild("SkillTree");
 	
 	skillTreeFrame = mainGUIClone:WaitForChild("SkillTreeFrame");
@@ -158,13 +159,16 @@ end
 local debounce = 0;
 local inQueue = false;
 
+--// Skill Bools \\--
+local hasSteadyAim = false;
+local hasBetterPlates = false;
+local hasQuickFeet = false;
+
 local function initializeGame()
 	if debounce == 0 then
 		
 		debounce = 1;
-		
 		inQueue = false;
-		
 		transition:WaitForChild("Waiting").Text = "Loading Match... (2/2)";
 		
 		repCharactersRemote:FireServer(repStorage:WaitForChild(player.Team.Name.."1"))
@@ -331,7 +335,7 @@ local function initializeGame()
 				camera.CFrame = camera.CFrame:lerp(currentGun.head.CFrame * CFrame.Angles(0, 0, math.rad(-20)), .25);
 			end
 			
-			if thisChar and thisChar:FindFirstChild("HumanoidRootPart") and thisChar.HumanoidRootPart.Velocity.Magnitude > 1 then
+			if thisChar and thisChar:FindFirstChild("HumanoidRootPart") and thisChar.HumanoidRootPart.Velocity.Magnitude > 0.5 then
 				if currentGun.moveAnim.IsPlaying == false then
 					currentGun.moveAnim:Play(.1, .4, thisChar.HumanoidRootPart.Velocity.Magnitude/9);
 				end
@@ -378,7 +382,8 @@ local function initializeGame()
 			repRaysRemote:FireServer(hitPos, gunModel:FindFirstChild("FirePart").CFrame.p);
 					
 			if hitPart then
-				repDamageRemote:FireServer(hitPart, currentGun.damage, hitPos, hitNorm, (camera.CFrame * CFrame.new(0, 0, -100).p)); --player, part, damage, position, normal
+				local shotDamage = currentGun.damage; --this placed if needed in future
+				repDamageRemote:FireServer(hitPart, shotDamage, hitPos, hitNorm, (camera.CFrame * CFrame.new(0, 0, -100).p)); --player, part, damage, position, normal
 				if hitPart.Parent and hitPart.Parent:FindFirstChild("Humanoid") and string.find(hitPart.Parent.Name, "Ragdoll") == nil then
 					if hitPart.Parent:FindFirstChild("Humanoid").Health - damage > 0 then
 						local hitFleshClone = hitFlesh:Clone();
@@ -393,69 +398,53 @@ local function initializeGame()
 		
 		local lastTick = tick();
 		
+		local function fireWeapon()
+			if (tick() - lastTick) > 60/currentGun.fireRate and currentGun.currentMag > 0 and reloading == false and equipping == false then
+					currentGun.currentMag = currentGun.currentMag - 1;
+					lastTick = tick();
+					camShake:ShakeOnce(.5, 3, 0.1, .15)
+					local muzzleFX = currentGun.firePart:GetChildren();
+					for i = 1, #muzzleFX do
+						muzzleFX[i].Enabled = true;
+					end
+					currentGun.shootAnim:Play(.1, .95, 2.25);
+					raycast(currentGun.clone, currentGun.damage);
+					repShotRemote:FireServer(player.Character:FindFirstChild(currentGun.ThirdPersonClone));
+					local cHSoundClone = casingHit:Clone();
+					cHSoundClone.Parent = glock17FireSound.Parent;
+					cHSoundClone.PlaybackSpeed = math.random(90, 100)/100;
+					cHSoundClone:Destroy();
+					ejectShell(currentGun.clone.Shell);
+					if hasSteadyAim and thisChar.HumanoidRootPart.Velocity.Magnitude < 1 then
+						recoil(currentGun.recoil * .65);
+					else
+						recoil(currentGun.recoil);		
+					end
+					for i = 1, #muzzleFX do
+						muzzleFX[i].Enabled = false;
+					end
+				else
+					if currentGun.currentMag < 1 then
+						local eSoundClone = noBullet:Clone();
+						eSoundClone.Parent = glock17FireSound.Parent;
+						eSoundClone.PlaybackSpeed = math.random(90, 100)/100;
+						eSoundClone:Play();
+						wait();
+					end
+				end
+			wait();
+		end
+		
 		local function shoot() 
 			if currentGun.fireType == "Semi-Automatic" then
-				if (tick() - lastTick) > 60/currentGun.fireRate and currentGun.currentMag > 0 and reloading == false and equipping == false then
-					currentGun.currentMag = currentGun.currentMag - 1;
-					lastTick = tick();
-					camShake:ShakeOnce(.5, 3, 0.1, .15)
-					local muzzleFX = currentGun.firePart:GetChildren();
-					for i = 1, #muzzleFX do
-						muzzleFX[i].Enabled = true;
-					end
-					currentGun.shootAnim:Play(.1, .95, 2.25);
-					raycast(currentGun.clone, currentGun.damage);
-					repShotRemote:FireServer(player.Character:FindFirstChild(currentGun.ThirdPersonClone));
-					local cHSoundClone = casingHit:Clone();
-					cHSoundClone.Parent = glock17FireSound.Parent;
-					cHSoundClone.PlaybackSpeed = math.random(90, 100)/100;
-					cHSoundClone:Destroy();
-					ejectShell(currentGun.clone.Shell);
-					recoil(currentGun.recoil);
-					for i = 1, #muzzleFX do
-						muzzleFX[i].Enabled = false;
-					end
-				else
-					if currentGun.currentMag < 1 then
-						local eSoundClone = noBullet:Clone();
-						eSoundClone.Parent = glock17FireSound.Parent;
-						eSoundClone.PlaybackSpeed = math.random(90, 100)/100;
-						eSoundClone:Play();
-					end
-				end
+				
+				fireWeapon();
+				
 			elseif currentGun.fireType == "Automatic" then
 				repeat
-				if (tick() - lastTick) > 60/currentGun.fireRate and currentGun.currentMag > 0 and reloading == false and equipping == false then --please condense this function you cunt fuck
-					currentGun.currentMag = currentGun.currentMag - 1;
-					lastTick = tick();
-					camShake:ShakeOnce(.5, 3, 0.1, .15)
-					local muzzleFX = currentGun.firePart:GetChildren();
-					for i = 1, #muzzleFX do
-						muzzleFX[i].Enabled = true;
-					end
-					currentGun.shootAnim:Play(.1, .95, 2.25);
-					raycast(currentGun.clone, currentGun.damage);
-					repShotRemote:FireServer(player.Character:FindFirstChild(currentGun.ThirdPersonClone));
-					local cHSoundClone = casingHit:Clone();
-					cHSoundClone.Parent = glock17FireSound.Parent;
-					cHSoundClone.PlaybackSpeed = math.random(90, 100)/100;
-					cHSoundClone:Destroy();
-					ejectShell(currentGun.clone.Shell);
-					recoil(currentGun.recoil);
-					for i = 1, #muzzleFX do
-						muzzleFX[i].Enabled = false;
-					end
-				else
-					if currentGun.currentMag < 1 then
-						local eSoundClone = noBullet:Clone();
-						eSoundClone.Parent = glock17FireSound.Parent;
-						eSoundClone.PlaybackSpeed = math.random(90, 100)/100;
-						eSoundClone:Play();
-						break;
-					end
-					RunService.RenderStepped:Wait();
-				end
-				
+					
+					fireWeapon();
+					
 				until mouseDown == false;
 			end
 		end
@@ -538,8 +527,12 @@ local function initializeGame()
 		
 		--// Begin Custom Movement \\--
 		
-		local MinSpeed = 2
-		local MaxSpeed = 12
+		local MinSpeed = 2;
+		local MaxSpeed = 12;
+		
+		if hasQuickFeet == true then
+			MaxSpeed = 13.8;
+		end
 		
 		thisHum.WalkSpeed = MinSpeed
 		
@@ -663,24 +656,29 @@ end
 local oldSelect;
 local specifiedWeapon;
 
-local function selectWeapon(weapon)
-	if oldSelect then
-		oldSelect.BackgroundTransparency = 1;
-		specifiedWeapon.Parent = repStorage;
+local function selectWeapon(weapon) --argument is a weapon frame containing the button, lock, name, tips, etc.
+	if weapon:WaitForChild("Lock").Visible == false then
+		if oldSelect ~= nil and oldSelect.Name == weapon.Name then
+			return;
+		end
+		if oldSelect then
+			oldSelect:WaitForChild("Button").BackgroundTransparency = 1;
+			specifiedWeapon.Parent = repStorage;
+		end
+		
+		specifiedWeapon = repStorage:WaitForChild(weapon.Name .. "Display");
+		weaponSelect:Play();
+		specifiedWeapon.Parent = workspace;
+		specifiedWeapon:SetPrimaryPartCFrame(workspace:WaitForChild("WeaponDisplay").CFrame);
+		oldSelect = weapon
+		oldSelect:WaitForChild("Button").BackgroundTransparency = 0.7;
+		
+		selectedWeapon = weapon.Name;
 	end
-	
-	specifiedWeapon = repStorage:WaitForChild(weapon.Name .. "Display");
-	weaponSelect:Play();
-	specifiedWeapon.Parent = workspace;
-	specifiedWeapon:SetPrimaryPartCFrame(workspace:WaitForChild("WeaponDisplay").CFrame);
-	oldSelect = weapon:WaitForChild("Button");
-	oldSelect.BackgroundTransparency = 0.7;
-	
-	selectedWeapon = weapon.Name;
 end
 
 local function instantiateWeaponButtons()
-	local weaponMenuChildren = equipment:WaitForChild("Weapons"):GetChildren();
+	local weaponMenuChildren = weapons:GetChildren();
 	
 	for _, weapon in ipairs(weaponMenuChildren) do
 		weapon:WaitForChild("Button").MouseButton1Click:Connect(function()
@@ -791,6 +789,19 @@ local function updateStatsTree(ability)
 	print("your skills are: ")
 	for i = 0, #mySkills, 1 do
 		print(mySkills[i]);
+		if mySkills[i] == "AK47" then
+			
+			weapons:WaitForChild("AK47"):WaitForChild("Lock").Visible = false;
+			
+		elseif mySkills[i] == "Steady Aim" then
+				
+			hasSteadyAim = true;
+			
+		elseif mySkills[i] == "Quick Feet" then
+				
+			hasQuickFeet = true;
+				
+		end
 	end
 	
 end
@@ -987,5 +998,6 @@ repEndMatchRemote.OnClientEvent:Connect(endMatch);
 instantiateWeaponButtons();
 instantiateSkillButtons();
 updateStatsTree("startup");
+selectWeapon(weapons:WaitForChild("MP5SD"));
 
 -- \\ Begin Menu //--
